@@ -8,6 +8,7 @@ That is the point: you will add both, lesson by lesson, in Units 2 and 3.
 import sqlite3
 
 from flask import Flask, g, jsonify, request
+from password_utils import hash_password, verify_password
 
 DATABASE = "recipes.db"
 
