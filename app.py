@@ -9,6 +9,7 @@ import sqlite3
 
 from flask import Flask, g, jsonify, request
 from password_utils import hash_password, verify_password
+from werkzeug.security import generate_password_hash
 
 DATABASE = "recipes.db"
 
@@ -86,6 +87,32 @@ def create_recipe():
     ).fetchone()
     return jsonify(recipe_to_dict(row)), 201
 
+@app.post("/register")
+def register():
+    data = request.get_json() or {}
+
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not username or not email or not password:
+        return {"error": "username, email, and password are required"}, 400
+
+    db = get_db()
+
+    password_hash = generate_password_hash(password)
+
+    try:
+        cursor = db.execute(
+            "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+            (username, email, password_hash),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        return {"error": "username or email already exists"}, 409   
+
+    user_id = cursor.lastrowid
+    return {"id": user_id, "username": username}, 201
 
 @app.patch("/recipes/<int:recipe_id>")
 def update_recipe(recipe_id):
