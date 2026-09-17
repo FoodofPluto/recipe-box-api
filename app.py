@@ -9,7 +9,7 @@ import sqlite3
 
 from flask import Flask, g, jsonify, request
 from password_utils import hash_password, verify_password
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 
 DATABASE = "recipes.db"
 
@@ -113,6 +113,34 @@ def register():
 
     user_id = cursor.lastrowid
     return {"id": user_id, "username": username}, 201
+
+@app.post("/login")
+def login():
+    data = request.get_json() or {}
+
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return {"error": "username and password are required"}, 400
+
+    db = get_db()
+    user = db.execute(
+        "SELECT id, username, password_hash FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+
+    # Generic error message – same for unknown user and wrong password
+    generic_error = {"error": "Invalid username or password"}
+
+    if user is None:
+        return generic_error, 401
+
+    if not check_password_hash(user["password_hash"], password):
+        return generic_error, 401
+
+    # Success: return only safe identity info
+    return {"id": user["id"], "username": user["username"]}, 200
 
 @app.patch("/recipes/<int:recipe_id>")
 def update_recipe(recipe_id):
