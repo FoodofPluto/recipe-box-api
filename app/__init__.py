@@ -7,7 +7,7 @@ That is the point: you will add both, lesson by lesson, in Units 2 and 3.
 
 import sqlite3
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, g, jsonify, request, current_app
 from password_utils import hash_password, verify_password
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
@@ -20,28 +20,35 @@ from functools import wraps
 load_dotenv()
 
 JWT_SECRET = os.getenv("JWT_SECRET")
-print("JWT_SECRET is:", repr(JWT_SECRET))
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required")
+DB_PATH = os.getenv("DATABASE_PATH", "recipes.db")
+DB_TEST_PATH = os.getenv("TEST_DATABASE_PATH", "test_recipes.db")
+DEBUG_FLAG = os.getenv("FLASK_DEBUG", "False") == "True"
 
-DATABASE = "recipes.db"
+class Config:
+    DEBUG = DEBUG_FLAG
+    TESTING = False
+    DATABASE = DB_PATH
 
-def create_app():
-    app = Flask(__name__)
-    def get_db():
-        if "db" not in g:
-            g.db = sqlite3.connect(DATABASE)
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON")
-        return g.db
+class DevelopmentConfig(Config):
+    DEBUG = DEBUG_FLAG
 
+class TestingConfig(Config):
+    TESTING = True
+    DATABASE = DB_TEST_PATH  # separate DB for tests (name is up to you)
 
-    @app.teardown_appcontext
-    def close_db(exception):
-        db = g.pop("db", None)
-        if db is not None:
-            db.close()
+class ProductionConfig(Config):
+    pass
 
 
-    def recipe_to_dict(row):
+config_map = {
+    "development": DevelopmentConfig,
+    "testing": TestingConfig,
+    "production": ProductionConfig,
+}
+
+def recipe_to_dict(row):
         return {
             "id": row["id"],
             "title": row["title"],
@@ -49,6 +56,34 @@ def create_app():
             "instructions": row["instructions"],
             "is_public": bool(row["is_public"]),
         }
+
+def get_db():
+        if "db" not in g:
+            g.db = sqlite3.connect(current_app.config["DATABASE"])
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON")
+        return g.db
+
+def create_app(config_name="development"):
+    from app.routes.auth import auth_bp
+    from app.routes.recipes import recipes_bp
+    from app.db import init_db
+
+    app = Flask(__name__)
+    app.config.from_object(config_map[config_name])
+
+    init_db(app)
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(recipes_bp)
+    
+
+    @app.teardown_appcontext
+    def close_db(exception):
+        db = g.pop("db", None)
+        if db is not None:
+            db.close()
+
 
 
     @app.get("/")
@@ -93,53 +128,6 @@ def create_app():
             return f(*args, **kwargs)
         return wrapper
 
-    @app.post("/recipes")
-    def create_recipe():
-        # 🔐 1. Read Authorization header
-        auth_header = request.headers.get("Authorization", "")
-
-        # 🔐 2. Check for "Bearer <token>" format
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "missing or invalid Authorization header"}), 401
-
-        token = auth_header.split(" ", 1)[1]
-
-        try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "token expired, please log in again"}), 401
-        except jwt.PyJWTError:
-            return jsonify({"error": "invalid token"}), 401
-
-        # 🔐 4. Extract identity from verified token
-        user_id = payload.get("user_id")
-        username = payload.get("username")
-        # (For now we just keep these in local variables for possible use later.)
-
-        # 👇 existing recipe creation logic
-        data = request.get_json(silent=True)
-        if not data or not data.get("title") or not data.get("ingredients"):
-            return jsonify({"error": "title and ingredients are required"}), 400
-        db = get_db()
-        try:
-            cur = db.execute(
-                "INSERT INTO recipes (title, ingredients, instructions, is_public, user_id)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (
-                    data["title"],
-                    data["ingredients"],
-                    data.get("instructions", ""),
-                    1 if data.get("is_public", True) else 0,
-                    user_id,
-                ),
-            )
-            db.commit()
-        except sqlite3.IntegrityError:
-            return jsonify({"error": "a recipe with that title already exists"}), 409
-        row = db.execute(
-            "SELECT * FROM recipes WHERE id = ?", (cur.lastrowid,)
-        ).fetchone()
-        return jsonify(recipe_to_dict(row)), 201
 
     @app.post("/register")
     def register():
