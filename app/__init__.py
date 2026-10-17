@@ -91,21 +91,6 @@ def create_app(config_name="development"):
         return jsonify({"message": "Recipe Box API", "recipes": "/recipes"})
 
 
-    @app.get("/recipes")
-    def list_recipes():
-        rows = get_db().execute("SELECT * FROM recipes ORDER BY id").fetchall()
-        return jsonify([recipe_to_dict(r) for r in rows])
-
-
-    @app.get("/recipes/<int:recipe_id>")
-    def get_recipe(recipe_id):
-        row = get_db().execute(
-            "SELECT * FROM recipes WHERE id = ?", (recipe_id,)
-        ).fetchone()
-        if row is None:
-            return jsonify({"error": "recipe not found"}), 404
-        return jsonify(recipe_to_dict(row))
-
     def token_required(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -128,34 +113,6 @@ def create_app(config_name="development"):
             return f(*args, **kwargs)
         return wrapper
 
-
-    @app.post("/register")
-    def register():
-        data = request.get_json() or {}
-
-        username = data.get("username")
-        email = data.get("email")
-        password = data.get("password")
-        role = data.get("role")
-
-        if not username or not email or not password:
-            return {"error": "username, email, and password are required"}, 400
-
-        db = get_db()
-
-        password_hash = generate_password_hash(password)
-
-        try:
-            cursor = db.execute(
-                "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
-                (username, email, password_hash, role),
-            )
-            db.commit()
-        except sqlite3.IntegrityError:
-            return {"error": "username or email already exists"}, 409   
-
-        user_id = cursor.lastrowid
-        return {"id": user_id, "username": username, "role": role}, 201
 
     @app.post("/login")
     def login():
