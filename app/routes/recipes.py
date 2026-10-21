@@ -4,35 +4,31 @@ import jwt
 import sqlite3
 from app.db import get_all_recipes, insert_recipe, get_db
 from app.services.auth_service import get_jwt_payload_from_request
+from app.services.recipe_service import get_recipes, get_recipe_by_id
 
 
 recipes_bp = Blueprint("recipes", __name__, url_prefix="")
 
-def recipe_to_dict(row):
-        return {
-            "id": row["id"],
-            "title": row["title"],
-            "ingredients": row["ingredients"],
-            "instructions": row["instructions"],
-            "is_public": bool(row["is_public"]),
-        }
+def recipe_to_dict(recipe):
+    return {
+        "id": recipe.id,
+        "title": recipe.title,
+        "ingredients": recipe.ingredients,
+        "instructions": recipe.instructions,
+        "is_public": bool(recipe.is_public),
+    }
 
 @recipes_bp.get("/recipes")
 def list_recipes():
-    rows = get_all_recipes()
-    return jsonify([recipe_to_dict(r) for r in rows])
+    recipes = get_recipes() 
+    return jsonify([recipe_to_dict(r) for r in recipes])
 
 @recipes_bp.get("/recipes/<int:recipe_id>")
 def get_recipe(recipe_id):
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM recipes WHERE id = ?", (recipe_id,)
-    ).fetchone()
-
-    if row is None:
+    recipe = get_recipe_by_id(recipe_id)
+    if recipe is None:
         return jsonify({"error": "recipe not found"}), 404
-
-    return jsonify(recipe_to_dict(row)), 200
+    return jsonify(recipe_to_dict(recipe)), 200
 
 @recipes_bp.post("/recipes")
 def create_recipe():

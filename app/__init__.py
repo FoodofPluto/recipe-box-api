@@ -13,6 +13,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import jwt
 import sqlite3
+from app.config import config_map
+from app.db import init_db
+from app.extensions import db
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from functools import wraps
@@ -22,47 +25,6 @@ load_dotenv()
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is required")
-DB_PATH = os.getenv("DATABASE_PATH", "recipes.db")
-DB_TEST_PATH = os.getenv("TEST_DATABASE_PATH", "test_recipes.db")
-DEBUG_FLAG = os.getenv("FLASK_DEBUG", "False") == "True"
-
-class Config:
-    DEBUG = DEBUG_FLAG
-    TESTING = False
-    DATABASE = DB_PATH
-
-class DevelopmentConfig(Config):
-    DEBUG = DEBUG_FLAG
-
-class TestingConfig(Config):
-    TESTING = True
-    DATABASE = DB_TEST_PATH  # separate DB for tests (name is up to you)
-
-class ProductionConfig(Config):
-    pass
-
-
-config_map = {
-    "development": DevelopmentConfig,
-    "testing": TestingConfig,
-    "production": ProductionConfig,
-}
-
-def recipe_to_dict(row):
-        return {
-            "id": row["id"],
-            "title": row["title"],
-            "ingredients": row["ingredients"],
-            "instructions": row["instructions"],
-            "is_public": bool(row["is_public"]),
-        }
-
-def get_db():
-        if "db" not in g:
-            g.db = sqlite3.connect(current_app.config["DATABASE"])
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON")
-        return g.db
 
 def create_app(config_name="development"):
     from app.routes.auth import auth_bp
@@ -72,7 +34,9 @@ def create_app(config_name="development"):
     app = Flask(__name__)
     app.config.from_object(config_map[config_name])
 
+    db.init_app(app)
     init_db(app)
+    
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(recipes_bp)
