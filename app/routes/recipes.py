@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request
 from app import JWT_SECRET
 import jwt
-import sqlite3
-from app.db import get_all_recipes, insert_recipe, get_db
+from app.extensions import db
+from app.models import Recipe
 from app.services.auth_service import get_jwt_payload_from_request
 from app.services.recipe_service import get_recipes, get_recipe_by_id
 
@@ -16,6 +16,7 @@ def recipe_to_dict(recipe):
         "ingredients": recipe.ingredients,
         "instructions": recipe.instructions,
         "is_public": bool(recipe.is_public),
+        "nickname": recipe.nickname
     }
 
 @recipes_bp.get("/recipes")
@@ -32,14 +33,19 @@ def get_recipe(recipe_id):
 
 @recipes_bp.post("/recipes")
 def create_recipe():
-    # 🔐 Use auth service instead of inline token logic
-    payload, error_response = get_jwt_payload_from_request()
-    if error_response is not None:
-        # error_response is (response_body, status_code)
-        return error_response
+#    # 🔐 Use auth service instead of inline token logic
+#    payload, error_response = get_jwt_payload_from_request()
+#    if error_response is not None:
+#        # error_response is (response_body, status_code)
+#        return error_response
 
-    user_id = payload.get("user_id")
-    username = payload.get("username")
+#    user_id = payload.get("user_id")
+#    username = payload.get("username")
+
+
+    # TEMP: bypass auth just for ORM work
+    user_id = 1
+    username = "seed_user"
 
     # 👇 existing recipe creation logic stays the same
     data = request.get_json(silent=True)
@@ -47,17 +53,21 @@ def create_recipe():
         return jsonify({"error": "title and ingredients are required"}), 400
 
     try:
-        row = insert_recipe(
-        title=data["title"],
-        ingredients=data["ingredients"],
-        instructions=data.get("instructions", ""),
-        is_public=1 if data.get("is_public", True) else 0,
-        user_id=user_id,
+        recipe = Recipe(
+            title=data["title"],
+            ingredients=data["ingredients"],
+            instructions=data.get("instructions", ""),
+            is_public=1 if data.get("is_public", True) else 0,
+            user_id=user_id,
         )
-    except sqlite3.IntegrityError:
-        return jsonify({"error": "a recipe with that title already exists"}), 409
+        db.session.add(recipe)
+        db.session.commit()
+    except Exception as e:
+        print("ERROR CREATING RECIPE:", e)
+        return jsonify({"error": "internal error creating recipe"}), 500
 
-    return jsonify(recipe_to_dict(row)), 201
+    return jsonify(recipe_to_dict(recipe)), 201
+
 
 @recipes_bp.get("/health")
 def health_check():

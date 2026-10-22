@@ -1,3 +1,6 @@
 flask
 PyJWT
 Flask-SQLAlchemy
+Flask-Migrate
+PyJWT
+python-dotenv
