@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from app import JWT_SECRET
 import jwt
-from app.extensions import db
+from app.extensions import db, cache
 from app.models import Recipe
 from app.services.auth_service import get_jwt_payload_from_request
 from app.services.recipe_service import get_recipes, get_recipe_by_id
@@ -19,7 +19,9 @@ def recipe_to_dict(recipe):
         "nickname": recipe.nickname
     }
 
+
 @recipes_bp.get("/recipes")
+@cache.cached(timeout=60)
 def list_recipes():
     recipes = get_recipes() 
     return jsonify([recipe_to_dict(r) for r in recipes])
@@ -62,6 +64,7 @@ def create_recipe():
         )
         db.session.add(recipe)
         db.session.commit()
+        cache.clear()
     except Exception as e:
         print("ERROR CREATING RECIPE:", e)
         return jsonify({"error": "internal error creating recipe"}), 500

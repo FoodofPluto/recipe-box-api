@@ -30,12 +30,14 @@ def create_app(config_name="development"):
     from app.routes.auth import auth_bp
     from app.routes.recipes import recipes_bp
     from app.db import init_db
+    from app.extensions import cache
 
     app = Flask(__name__)
     app.config.from_object(config_map[config_name])
 
     db.init_app(app)
     migrate.init_app(app, db)
+    cache.init_app(app)
 #    init_db(app)
     
 

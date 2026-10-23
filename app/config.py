@@ -9,6 +9,8 @@ class Config:
     DEBUG = DEBUG_FLAG
     TESTING = False
     DATABASE = DB_PATH
+    CACHE_TYPE = "SimpleCache"
+    CACHE_DEFAULT_TIMEOUT = 60
 
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE}"
 
